@@ -78,6 +78,12 @@ namespace LiteDB
         /// </summary>
         public object Deserialize(Type type, BsonValue value)
         {
+            // test if has a custom type implementation
+            if (_customDeserializer.TryGetValue(type, out Func<BsonValue, object> custom))
+            {
+                return custom(value);
+            }
+            
             // null value - null returns
             if (value.IsNull) return null;
 
@@ -87,12 +93,6 @@ namespace LiteDB
                 type = Reflection.UnderlyingTypeOf(type);
             }
 
-            // test if has a custom type implementation
-            if (_customDeserializer.TryGetValue(type, out Func<BsonValue, object> custom))
-            {
-                return custom(value);
-            }
-
             var typeInfo = type.GetTypeInfo();
 
             // check if your type is already a BsonValue/BsonDocument/BsonArray
@@ -100,35 +100,36 @@ namespace LiteDB
             {
                 return value;
             }
-            else if (type == typeof(BsonDocument))
+
+            if (type == typeof(BsonDocument))
             {
                 return value.AsDocument;
             }
-            else if (type == typeof(BsonArray))
+            if (type == typeof(BsonArray))
             {
                 return value.AsArray;
             }
 
             // raw values to native bson values
-            else if (_bsonTypes.Contains(type))
+            if (_bsonTypes.Contains(type))
             {
                 return value.RawValue;
             }
 
             // simple ConvertTo to basic .NET types
-            else if (_basicTypes.Contains(type))
+            if (_basicTypes.Contains(type))
             {
                 return Convert.ChangeType(value.RawValue, type);
             }
 
             // special cast to UInt64 to Int64
-            else if (type == typeof(UInt64))
+            if (type == typeof(UInt64))
             {
                 return unchecked((UInt64)value.AsInt64);
             }
 
             // enum value is an int
-            else if (typeInfo.IsEnum)
+            if (typeInfo.IsEnum)
             {
                 if (value.IsString) return Enum.Parse(type, value.AsString);
 
@@ -147,10 +148,8 @@ namespace LiteDB
                 {
                     return this.DeserializeArray(type.GetElementType(), value.AsArray);
                 }
-                else
-                {
-                    return this.DeserializeList(type, value.AsArray);
-                }
+
+                return this.DeserializeList(type, value.AsArray);
             }
 
             // if value is document, deserialize as document
